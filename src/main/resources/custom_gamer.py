@@ -2,9 +2,8 @@
 @author: Skyler Berg
 '''
 
-import random
-import signal
-from contextlib import contextmanager
+from __future__ import with_statement
+from time import time
 
 #from org.ggp.base.util.statemachine import MachineState
 from org.ggp.base.util.statemachine.implementation.prover import ProverStateMachine
@@ -31,18 +30,41 @@ class KnownState(object):
 states = {}
 
 
+def save_states(state_machine):
+    hash = state_machine.getInitialState().hashCode()
+    with open("~/ggp_state/game" + str(hash) + ".csv", "a") as out:
+        for state in states:
+            row= ",".join(state, states[state].count, states[state].total) + "\n"
+            out.write(row)
+
+
+def load_states(state_machine):
+    hash = state_machine.getInitialState().hashCode()
+    try:
+        with open("~/ggp_state/game" + str(hash) + ".csv") as state_file:
+            global states
+            for row in state_file:
+                state_hash, count, total = map(int, row.split(","))
+                state = KnownState()
+                state.count = count
+                state.total = total
+                states[state_hash] = state
+    except IOError:
+        pass
+
+
 class CustomPythonGamer(StateMachineGamer):
 
     def getName(self):
         return "Skyler's Gamer"
 
     def stateMachineMetaGame(self, timeout):
-        pass
+        load_states(self.getStateMachine())
 
     def stateMachineSelectMove(self, timeout):
-        print timeout
         current_state = self.getCurrentState()
-        while True:
+        print time(), timeout / 1000.0, time() < (timeout / 1000.0) - 1
+        while time() < (timeout / 1000.0) - 1:
             self._depth_charge(current_state)
         chance_to_win, selection = self._select_move(current_state)
         print chance_to_win, selection
@@ -50,9 +72,11 @@ class CustomPythonGamer(StateMachineGamer):
         return selection
 
     def stateMachineStop(self):
+        #save_states(self.getStateMachine())
         pass
 
     def stateMachineAbort(self):
+        #save_states(self.getStateMachine())
         pass
 
     def getInitialStateMachine(self):
@@ -60,8 +84,6 @@ class CustomPythonGamer(StateMachineGamer):
 
     def _select_move(self, current_state):
         """ Returns a chance to win and the move """
-        #if self.getStateMachine().isTerminal(current_state):
-            #return self.getStateMachine().getGoal(current_state, self.getRole()), None
         state_map = self.getStateMachine().getNextStates(current_state, self.getRole())
         moves = list(state_map.keySet().iterator())
         scores = {}
@@ -81,12 +103,10 @@ class CustomPythonGamer(StateMachineGamer):
         if hash not in states:
             states[hash] = KnownState()
         if self.getStateMachine().isTerminal(current_state):
-            return self.getStateMachine().getGoal(current_state, self.getRole())
-        state_map = self.getStateMachine().getNextStates(current_state, self.getRole())
-        moves = list(state_map.keySet().iterator())
-        random_move = random.choice(moves)
-        next_state = random.choice(state_map.get(random_move))
-        result = self._depth_charge(next_state)
+            result = self.getStateMachine().getGoal(current_state, self.getRole())
+        else:
+            next_state = self.getStateMachine().getRandomNextState(current_state)
+            result = self._depth_charge(next_state)
         states[hash].count += 1
         states[hash].total += result
         return result
